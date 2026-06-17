@@ -1,138 +1,269 @@
-﻿#include <stdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _MSC_VER
-#pragma execution_character_set("utf-8")
-#endif
+#include "include/culture_status.h"
+#include "include/daily_log_list.h"
+#include "include/strain_archive_bst.h"
+#include "include/app.h"
 
-// 表示单日培养日志
-typedef struct LogNode {
-    char date[15];          // 例如："2026-06-17"
-    float ph_value;
-    float temperature;
-    char gas_env[50];       // 例如："Aerobic"、"Anaerobic"、"5% CO2"
-    char observation[256];
-    struct LogNode* next;
-} LogNode;
-
-// 表示拥有日志的菌株实体
-typedef struct StrainNode {
-    char name[50];
-    LogNode* log_head;      // 指向第一天的日志
-    LogNode* log_tail;      // 指向最近一条日志，便于 O(1) 追加
-} StrainNode;
-
-LogNode* create_log_node(const char* date, float ph, float temp, const char* gas_env, const char* obs) {
-    if (date == NULL || gas_env == NULL || obs == NULL) {
-        return NULL;
+static void strip_newline(char* text) {
+    if (text == NULL) {
+        return;
     }
 
-    LogNode* node = (LogNode*)malloc(sizeof(LogNode));
-    if (node == NULL) {
-        return NULL;
+    size_t len = strlen(text);
+    while (len > 0 && (text[len - 1] == '\n' || text[len - 1] == '\r')) {
+        text[len - 1] = '\0';
+        len--;
     }
-
-    strncpy(node->date, date, sizeof(node->date) - 1);
-    node->date[sizeof(node->date) - 1] = '\0';
-
-    node->ph_value = ph;
-    node->temperature = temp;
-
-    strncpy(node->gas_env, gas_env, sizeof(node->gas_env) - 1);
-    node->gas_env[sizeof(node->gas_env) - 1] = '\0';
-
-    strncpy(node->observation, obs, sizeof(node->observation) - 1);
-    node->observation[sizeof(node->observation) - 1] = '\0';
-
-    node->next = NULL;
-    return node;
 }
 
-void append_log(StrainNode* strain, const char* date, float ph, float temp, const char* gas_env, const char* obs) {
-    if (strain == NULL) {
-        return;
+static int read_line(const char* prompt, char* buffer, size_t size) {
+    if (prompt != NULL) {
+        printf("%s", prompt);
     }
 
-    LogNode* new_node = create_log_node(date, ph, temp, gas_env, obs);
-    if (new_node == NULL) {
-        return;
+    if (buffer == NULL || size == 0) {
+        return 0;
     }
 
-    if (strain->log_head == NULL) {
-        strain->log_head = new_node;
-        strain->log_tail = new_node;
-    } else {
-        if (strain->log_tail == NULL) {
-            strain->log_tail = strain->log_head;
-            while (strain->log_tail->next != NULL) {
-                strain->log_tail = strain->log_tail->next;
-            }
+    if (fgets(buffer, (int)size, stdin) == NULL) {
+        return 0;
+    }
+
+    if (strchr(buffer, '\n') == NULL) {
+        int ch;
+        while ((ch = getchar()) != '\n' && ch != EOF) {
         }
-        strain->log_tail->next = new_node;
-        strain->log_tail = new_node;
+    }
+
+    strip_newline(buffer);
+    return 1;
+}
+
+static int read_int_input(const char* prompt, int* value) {
+    char line[128];
+    while (1) {
+        if (!read_line(prompt, line, sizeof(line))) {
+            return 0;
+        }
+
+        int parsed = 0;
+        char extra = '\0';
+        if (sscanf(line, " %d %c", &parsed, &extra) == 1) {
+            if (value != NULL) {
+                *value = parsed;
+            }
+            return 1;
+        }
+
+        printf("Invalid input. Please enter a valid integer.\n");
     }
 }
 
-void print_all_logs(StrainNode* strain) {
-    if (strain == NULL) {
-        printf("错误：strain 指针为空。\n");
-        return;
-    }
+static int read_float_input(const char* prompt, float* value) {
+    char line[128];
+    while (1) {
+        if (!read_line(prompt, line, sizeof(line))) {
+            return 0;
+        }
 
-    printf("菌株名称：%s\n", strain->name);
-    printf("培养日志：\n");
+        float parsed = 0.0f;
+        char extra = '\0';
+        if (sscanf(line, " %f %c", &parsed, &extra) == 1) {
+            if (value != NULL) {
+                *value = parsed;
+            }
+            return 1;
+        }
 
-    if (strain->log_head == NULL) {
-        printf("  当前没有日志。\n");
-        return;
-    }
-
-    LogNode* current = strain->log_head;
-    int index = 1;
-    while (current != NULL) {
-        printf("  日志 #%d\n", index);
-        printf("    日期        ：%s\n", current->date);
-        printf("    pH 值       ：%.2f\n", current->ph_value);
-        printf("    温度        ：%.2f C\n", current->temperature);
-        printf("    气体环境    ：%s\n", current->gas_env);
-        printf("    观察记录    ：%s\n", current->observation);
-        printf("\n");
-        current = current->next;
-        index++;
+        printf("Invalid input. Please enter a valid number.\n");
     }
 }
 
-void free_all_logs(StrainNode* strain) {
-    if (strain == NULL) {
+static void wait_for_enter(void) {
+    char buffer[8];
+    printf("Press Enter to continue...");
+    (void)fgets(buffer, sizeof(buffer), stdin);
+}
+
+static void free_logs_in_tree(StrainNode* root) {
+    if (root == NULL) {
         return;
     }
 
-    LogNode* current = strain->log_head;
-    while (current != NULL) {
-        LogNode* next = current->next;
-        free(current);
-        current = next;
-    }
+    free_logs_in_tree(root->left);
+    free_logs_in_tree(root->right);
+    culture_free_all_logs(root->log_head);
+    root->log_head = NULL;
+    root->log_tail = NULL;
+}
 
-    strain->log_head = NULL;
-    strain->log_tail = NULL;
+static void print_menu(void) {
+    printf("===========================================\n");
+    printf("  Microorganism Culture Management System\n");
+    printf("===========================================\n");
+    printf("1. Register New Strain\n");
+    printf("2. Append Culture Log\n");
+    printf("3. End Culture\n");
+    printf("4. Query Strain Status & Logs\n");
+    printf("5. Display All Strain Archives\n");
+    printf("0. Exit System\n");
+    printf("===========================================\n");
 }
 
 int main(void) {
-    StrainNode strain;
+    StrainNode* root = NULL;
 
-    strncpy(strain.name, "E.coli", sizeof(strain.name) - 1);
-    strain.name[sizeof(strain.name) - 1] = '\0';
-    strain.log_head = NULL;
-    strain.log_tail = NULL;
+    while (1) {
+        int choice = -1;
+        print_menu();
 
-    append_log(&strain, "2026-06-15", 7.20f, 37.00f, "Aerobic", "初始接种；培养基清澈。");
-    append_log(&strain, "2026-06-16", 6.85f, 36.80f, "Aerobic", "浑浊度增加；观察到轻微沉淀。");
-    append_log(&strain, "2026-06-17", 6.50f, 37.10f, "5% CO2", "生长明显；可见菌落形成。");
+        if (!read_int_input("Please enter your choice (0-5): ", &choice)) {
+            free_logs_in_tree(root);
+            bst_free_strain_tree(root);
+            return 0;
+        }
 
-    print_all_logs(&strain);
-    free_all_logs(&strain);
+        if (choice < 0 || choice > 5) {
+            printf("Invalid choice. Please enter a number between 0 and 5.\n");
+            continue;
+        }
 
-    return 0;
+        if (choice == 0) {
+            free_logs_in_tree(root);
+            bst_free_strain_tree(root);
+            printf("Goodbye.\n");
+            return 0;
+        }
+
+        if (choice == 1) {
+            char name[50];
+            int id = 0;
+
+            if (!read_line("Enter strain name: ", name, sizeof(name))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+
+            if (name[0] == '\0') {
+                printf("Error: strain name cannot be empty.\n");
+                continue;
+            }
+
+            if (!read_int_input("Enter strain ID: ", &id)) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+
+            root = bst_insert_strain(root, name, id);
+            continue;
+        }
+
+        if (choice == 2) {
+            char name[50];
+            StrainNode* target = NULL;
+
+            if (!read_line("Enter strain name: ", name, sizeof(name))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+
+            target = bst_search_strain(root, name);
+            if (target == NULL) {
+                printf("Error: strain \"%s\" not found.\n", name);
+                continue;
+            }
+
+            char date[15];
+            float ph = 0.0f;
+            float temp = 0.0f;
+            char gas_env[50];
+            char observation[256];
+
+            if (!read_line("Enter date (YYYY-MM-DD): ", date, sizeof(date))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+            if (!read_float_input("Enter pH value: ", &ph)) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+            if (!read_float_input("Enter temperature: ", &temp)) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+            if (!read_line("Enter gas environment: ", gas_env, sizeof(gas_env))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+            if (!read_line("Enter observation: ", observation, sizeof(observation))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+
+            culture_append_log(target, date, ph, temp, gas_env, observation);
+            continue;
+        }
+
+        if (choice == 3) {
+            char name[50];
+            StrainNode* target = NULL;
+
+            if (!read_line("Enter strain name: ", name, sizeof(name))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+
+            target = bst_search_strain(root, name);
+            if (target == NULL) {
+                printf("Error: strain \"%s\" not found.\n", name);
+                continue;
+            }
+
+            culture_end_culture(target);
+            continue;
+        }
+
+        if (choice == 4) {
+            char name[50];
+            StrainNode* target = NULL;
+
+            if (!read_line("Enter strain name: ", name, sizeof(name))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+
+            target = bst_search_strain(root, name);
+            if (target == NULL) {
+                printf("Error: strain \"%s\" not found.\n", name);
+                continue;
+            }
+
+            culture_display_strain_status(target);
+            continue;
+        }
+
+        if (choice == 5) {
+            if (root == NULL) {
+                printf("No strain archives available.\n");
+            } else {
+                bst_inorder_print_strains(root);
+            }
+            continue;
+        }
+
+        wait_for_enter();
+    }
 }
