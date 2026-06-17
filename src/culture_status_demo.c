@@ -1,37 +1,8 @@
-﻿#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "culture_status.h"
 
 #ifdef _MSC_VER
 #pragma execution_character_set("utf-8")
 #endif
-
-typedef struct LogNode {
-    char date[15];
-    float ph_value;
-    float temperature;
-    char gas_env[50];
-    char observation[256];
-    struct LogNode* next;
-} LogNode;
-
-typedef enum {
-    STATUS_UNTOUCHED = 0,  // Never Cultured
-    STATUS_CULTURING = 1,  // Currently Culturing
-    STATUS_ENDED = 2       // Culture Ended
-} CultureStatus;
-
-typedef struct StrainNode {
-    char name[50];
-    int strain_id;
-    CultureStatus status;
-
-    LogNode standard_data;       // Snapshot of final culture data (Deep copy)
-    LogNode* log_head;
-    LogNode* log_tail;
-    struct StrainNode* left;
-    struct StrainNode* right;
-} StrainNode;
 
 static void safe_copy(char* dest, size_t dest_size, const char* src) {
     if (dest == NULL || dest_size == 0) {
@@ -47,7 +18,7 @@ static void safe_copy(char* dest, size_t dest_size, const char* src) {
     dest[dest_size - 1] = '\0';
 }
 
-static LogNode* create_log_node(const char* date, float ph, float temp, const char* gas_env, const char* obs) {
+LogNode* culture_create_log_node(const char* date, float ph, float temp, const char* gas_env, const char* obs) {
     if (date == NULL || gas_env == NULL || obs == NULL) {
         return NULL;
     }
@@ -67,6 +38,40 @@ static LogNode* create_log_node(const char* date, float ph, float temp, const ch
     return node;
 }
 
+void culture_append_log(StrainNode* strain, const char* date, float ph, float temp, const char* gas_env, const char* obs) {
+    if (strain == NULL) {
+        return;
+    }
+
+    if (strain->status == STATUS_ENDED) {
+        printf("Cannot append log: Culture has already ended.\n");
+        return;
+    }
+
+    LogNode* new_node = culture_create_log_node(date, ph, temp, gas_env, obs);
+    if (new_node == NULL) {
+        return;
+    }
+
+    if (strain->log_head == NULL) {
+        strain->log_head = new_node;
+        strain->log_tail = new_node;
+    } else {
+        if (strain->log_tail == NULL) {
+            strain->log_tail = strain->log_head;
+            while (strain->log_tail->next != NULL) {
+                strain->log_tail = strain->log_tail->next;
+            }
+        }
+        strain->log_tail->next = new_node;
+        strain->log_tail = new_node;
+    }
+
+    if (strain->status == STATUS_UNTOUCHED) {
+        strain->status = STATUS_CULTURING;
+    }
+}
+
 static void print_log_data(const LogNode* log) {
     if (log == NULL) {
         printf("No culture data available yet.\n");
@@ -80,7 +85,7 @@ static void print_log_data(const LogNode* log) {
     printf("Observation: %s\n", log->observation);
 }
 
-void display_strain_status(StrainNode* strain) {
+void culture_display_strain_status(StrainNode* strain) {
     if (strain == NULL) {
         return;
     }
@@ -111,7 +116,7 @@ void display_strain_status(StrainNode* strain) {
     }
 }
 
-void end_culture(StrainNode* strain) {
+void culture_end_culture(StrainNode* strain) {
     if (strain == NULL) {
         return;
     }
@@ -137,12 +142,12 @@ void end_culture(StrainNode* strain) {
     safe_copy(strain->standard_data.gas_env, sizeof(strain->standard_data.gas_env), strain->log_tail->gas_env);
     safe_copy(strain->standard_data.observation, sizeof(strain->standard_data.observation), strain->log_tail->observation);
     strain->standard_data.next = NULL;
-
     strain->status = STATUS_ENDED;
+
     printf("Culture ended successfully. Standard data has been snapshotted.\n");
 }
 
-static void free_log_list(LogNode* head) {
+void culture_free_all_logs(LogNode* head) {
     while (head != NULL) {
         LogNode* next = head->next;
         free(head);
@@ -150,7 +155,7 @@ static void free_log_list(LogNode* head) {
     }
 }
 
-int main(void) {
+void run_status_demo(void) {
     StrainNode strain;
     memset(&strain, 0, sizeof(StrainNode));
 
@@ -163,21 +168,13 @@ int main(void) {
     strain.right = NULL;
     memset(&strain.standard_data, 0, sizeof(LogNode));
 
-    end_culture(&strain);
+    culture_end_culture(&strain);
 
-    strain.log_head = create_log_node("2026-06-17", 6.72f, 37.00f, "Aerobic", "Initial culture growth observed.");
-    strain.log_tail = strain.log_head;
-    strain.status = STATUS_CULTURING;
+    culture_append_log(&strain, "2026-06-17", 6.72f, 37.00f, "Aerobic", "Initial culture growth observed.");
+    culture_display_strain_status(&strain);
 
-    display_strain_status(&strain);
+    culture_end_culture(&strain);
+    culture_display_strain_status(&strain);
 
-    end_culture(&strain);
-
-    display_strain_status(&strain);
-
-    free_log_list(strain.log_head);
-    strain.log_head = NULL;
-    strain.log_tail = NULL;
-
-    return 0;
+    culture_free_all_logs(strain.log_head);
 }

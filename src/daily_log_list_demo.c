@@ -1,29 +1,24 @@
-﻿#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "daily_log_list.h"
 
 #ifdef _MSC_VER
 #pragma execution_character_set("utf-8")
 #endif
 
-// 表示单日培养日志
-typedef struct LogNode {
-    char date[15];          // 例如："2026-06-17"
-    float ph_value;
-    float temperature;
-    char gas_env[50];       // 例如："Aerobic"、"Anaerobic"、"5% CO2"
-    char observation[256];
-    struct LogNode* next;
-} LogNode;
+static void safe_copy(char* dest, size_t dest_size, const char* src) {
+    if (dest == NULL || dest_size == 0) {
+        return;
+    }
 
-// 表示拥有日志的菌株实体
-typedef struct StrainNode {
-    char name[50];
-    LogNode* log_head;      // 指向第一天的日志
-    LogNode* log_tail;      // 指向最近一条日志，便于 O(1) 追加
-} StrainNode;
+    if (src == NULL) {
+        dest[0] = '\0';
+        return;
+    }
 
-LogNode* create_log_node(const char* date, float ph, float temp, const char* gas_env, const char* obs) {
+    strncpy(dest, src, dest_size - 1);
+    dest[dest_size - 1] = '\0';
+}
+
+LogNode* daily_create_log_node(const char* date, float ph, float temp, const char* gas_env, const char* obs) {
     if (date == NULL || gas_env == NULL || obs == NULL) {
         return NULL;
     }
@@ -35,26 +30,23 @@ LogNode* create_log_node(const char* date, float ph, float temp, const char* gas
 
     strncpy(node->date, date, sizeof(node->date) - 1);
     node->date[sizeof(node->date) - 1] = '\0';
-
     node->ph_value = ph;
     node->temperature = temp;
-
     strncpy(node->gas_env, gas_env, sizeof(node->gas_env) - 1);
     node->gas_env[sizeof(node->gas_env) - 1] = '\0';
-
     strncpy(node->observation, obs, sizeof(node->observation) - 1);
     node->observation[sizeof(node->observation) - 1] = '\0';
-
     node->next = NULL;
+
     return node;
 }
 
-void append_log(StrainNode* strain, const char* date, float ph, float temp, const char* gas_env, const char* obs) {
+void daily_append_log(StrainNode* strain, const char* date, float ph, float temp, const char* gas_env, const char* obs) {
     if (strain == NULL) {
         return;
     }
 
-    LogNode* new_node = create_log_node(date, ph, temp, gas_env, obs);
+    LogNode* new_node = daily_create_log_node(date, ph, temp, gas_env, obs);
     if (new_node == NULL) {
         return;
     }
@@ -74,7 +66,7 @@ void append_log(StrainNode* strain, const char* date, float ph, float temp, cons
     }
 }
 
-void print_all_logs(StrainNode* strain) {
+void daily_print_all_logs(StrainNode* strain) {
     if (strain == NULL) {
         printf("错误：strain 指针为空。\n");
         return;
@@ -103,7 +95,7 @@ void print_all_logs(StrainNode* strain) {
     }
 }
 
-void free_all_logs(StrainNode* strain) {
+void daily_free_all_logs(StrainNode* strain) {
     if (strain == NULL) {
         return;
     }
@@ -119,20 +111,16 @@ void free_all_logs(StrainNode* strain) {
     strain->log_tail = NULL;
 }
 
-int main(void) {
+void run_daily_log_demo(void) {
     StrainNode strain;
 
-    strncpy(strain.name, "E.coli", sizeof(strain.name) - 1);
-    strain.name[sizeof(strain.name) - 1] = '\0';
-    strain.log_head = NULL;
-    strain.log_tail = NULL;
+    memset(&strain, 0, sizeof(StrainNode));
+    safe_copy(strain.name, sizeof(strain.name), "E.coli");
 
-    append_log(&strain, "2026-06-15", 7.20f, 37.00f, "Aerobic", "初始接种；培养基清澈。");
-    append_log(&strain, "2026-06-16", 6.85f, 36.80f, "Aerobic", "浑浊度增加；观察到轻微沉淀。");
-    append_log(&strain, "2026-06-17", 6.50f, 37.10f, "5% CO2", "生长明显；可见菌落形成。");
+    daily_append_log(&strain, "2026-06-15", 7.20f, 37.00f, "Aerobic", "初始接种；培养基清澈。");
+    daily_append_log(&strain, "2026-06-16", 6.85f, 36.80f, "Aerobic", "浑浊度增加；观察到轻微沉淀。");
+    daily_append_log(&strain, "2026-06-17", 6.50f, 37.10f, "5% CO2", "生长明显；可见菌落形成。");
 
-    print_all_logs(&strain);
-    free_all_logs(&strain);
-
-    return 0;
+    daily_print_all_logs(&strain);
+    daily_free_all_logs(&strain);
 }
