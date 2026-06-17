@@ -15,16 +15,20 @@ typedef struct LogNode {
     struct LogNode* next;
 } LogNode;
 
+typedef enum {
+    STATUS_UNTOUCHED = 0,  // Never Cultured
+    STATUS_CULTURING = 1,  // Currently Culturing
+    STATUS_ENDED = 2       // Culture Ended
+} CultureStatus;
+
 typedef struct StrainNode {
     char name[50];
     int strain_id;
-    int status;                  // 0: 培养中, 1: 培养结束
+    CultureStatus status;
 
-    LogNode standard_data;       // 最终培养数据快照（深拷贝）
-
+    LogNode standard_data;       // Snapshot of final culture data (Deep copy)
     LogNode* log_head;
     LogNode* log_tail;
-
     struct StrainNode* left;
     struct StrainNode* right;
 } StrainNode;
@@ -81,16 +85,29 @@ void display_strain_status(StrainNode* strain) {
         return;
     }
 
-    if (strain->status == 0) {
-        printf("Current Status: Culturing\n");
-        if (strain->log_tail != NULL) {
-            print_log_data(strain->log_tail);
-        } else {
+    switch (strain->status) {
+        case STATUS_UNTOUCHED:
+            printf("Current Status: Never Cultured\n");
             printf("No culture data available yet.\n");
-        }
-    } else if (strain->status == 1) {
-        printf("Current Status: Culture Ended. Standard Culture Parameters below:\n");
-        print_log_data(&strain->standard_data);
+            break;
+
+        case STATUS_CULTURING:
+            printf("Current Status: Culturing\n");
+            if (strain->log_tail != NULL) {
+                print_log_data(strain->log_tail);
+            } else {
+                printf("No culture data available yet.\n");
+            }
+            break;
+
+        case STATUS_ENDED:
+            printf("Current Status: Culture Ended. Standard Culture Parameters below:\n");
+            print_log_data(&strain->standard_data);
+            break;
+
+        default:
+            printf("Current Status: Unknown\n");
+            break;
     }
 }
 
@@ -99,7 +116,12 @@ void end_culture(StrainNode* strain) {
         return;
     }
 
-    if (strain->status == 1) {
+    if (strain->status == STATUS_UNTOUCHED) {
+        printf("Cannot end culture: Never cultured.\n");
+        return;
+    }
+
+    if (strain->status == STATUS_ENDED) {
         printf("Culture has already been ended.\n");
         return;
     }
@@ -116,7 +138,7 @@ void end_culture(StrainNode* strain) {
     safe_copy(strain->standard_data.observation, sizeof(strain->standard_data.observation), strain->log_tail->observation);
     strain->standard_data.next = NULL;
 
-    strain->status = 1;
+    strain->status = STATUS_ENDED;
     printf("Culture ended successfully. Standard data has been snapshotted.\n");
 }
 
@@ -134,7 +156,7 @@ int main(void) {
 
     safe_copy(strain.name, sizeof(strain.name), "E.coli");
     strain.strain_id = 2001;
-    strain.status = 0;
+    strain.status = STATUS_UNTOUCHED;
     strain.log_head = NULL;
     strain.log_tail = NULL;
     strain.left = NULL;
@@ -145,6 +167,7 @@ int main(void) {
 
     strain.log_head = create_log_node("2026-06-17", 6.72f, 37.00f, "Aerobic", "Initial culture growth observed.");
     strain.log_tail = strain.log_head;
+    strain.status = STATUS_CULTURING;
 
     display_strain_status(&strain);
 

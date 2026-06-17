@@ -15,10 +15,16 @@ typedef struct LogNode {
     struct LogNode* next;
 } LogNode;
 
+typedef enum {
+    STATUS_UNTOUCHED = 0,  // Never Cultured
+    STATUS_CULTURING = 1,  // Currently Culturing
+    STATUS_ENDED = 2       // Culture Ended
+} CultureStatus;
+
 typedef struct StrainNode {
     char name[50];
     int strain_id;
-    int status;
+    CultureStatus status;
 
     LogNode standard_data;
 
@@ -43,6 +49,19 @@ static void safe_copy(char* dest, size_t dest_size, const char* src) {
     dest[dest_size - 1] = '\0';
 }
 
+static const char* status_text(CultureStatus status) {
+    switch (status) {
+        case STATUS_UNTOUCHED:
+            return "Never Cultured";
+        case STATUS_CULTURING:
+            return "Culturing";
+        case STATUS_ENDED:
+            return "Culture Ended";
+        default:
+            return "Unknown";
+    }
+}
+
 StrainNode* create_strain_node(const char* name, int id) {
     if (name == NULL) {
         return NULL;
@@ -57,11 +76,10 @@ StrainNode* create_strain_node(const char* name, int id) {
 
     safe_copy(node->name, sizeof(node->name), name);
     node->strain_id = id;
-    node->status = 0;
+    node->status = STATUS_UNTOUCHED;
 
     memset(&node->standard_data, 0, sizeof(LogNode));
     node->standard_data.next = NULL;
-
     node->log_head = NULL;
     node->log_tail = NULL;
     node->left = NULL;
@@ -114,7 +132,8 @@ void inorder_print_strains(StrainNode* root) {
     }
 
     inorder_print_strains(root->left);
-    printf("菌株名称: %s, strain_id: %d, status: %d\n", root->name, root->strain_id, root->status);
+    printf("菌株名称: %s, strain_id: %d, status: %s\n",
+           root->name, root->strain_id, status_text(root->status));
     inorder_print_strains(root->right);
 }
 
