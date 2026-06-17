@@ -1,11 +1,269 @@
 #include <stdio.h>
-#include "app.h"
+#include <stdlib.h>
+#include <string.h>
+
+#include "include/culture_status.h"
+#include "include/daily_log_list.h"
+#include "include/strain_archive_bst.h"
+#include "include/app.h"
+
+static void strip_newline(char* text) {
+    if (text == NULL) {
+        return;
+    }
+
+    size_t len = strlen(text);
+    while (len > 0 && (text[len - 1] == '\n' || text[len - 1] == '\r')) {
+        text[len - 1] = '\0';
+        len--;
+    }
+}
+
+static int read_line(const char* prompt, char* buffer, size_t size) {
+    if (prompt != NULL) {
+        printf("%s", prompt);
+    }
+
+    if (buffer == NULL || size == 0) {
+        return 0;
+    }
+
+    if (fgets(buffer, (int)size, stdin) == NULL) {
+        return 0;
+    }
+
+    if (strchr(buffer, '\n') == NULL) {
+        int ch;
+        while ((ch = getchar()) != '\n' && ch != EOF) {
+        }
+    }
+
+    strip_newline(buffer);
+    return 1;
+}
+
+static int read_int_input(const char* prompt, int* value) {
+    char line[128];
+    while (1) {
+        if (!read_line(prompt, line, sizeof(line))) {
+            return 0;
+        }
+
+        int parsed = 0;
+        char extra = '\0';
+        if (sscanf(line, " %d %c", &parsed, &extra) == 1) {
+            if (value != NULL) {
+                *value = parsed;
+            }
+            return 1;
+        }
+
+        printf("Invalid input. Please enter a valid integer.\n");
+    }
+}
+
+static int read_float_input(const char* prompt, float* value) {
+    char line[128];
+    while (1) {
+        if (!read_line(prompt, line, sizeof(line))) {
+            return 0;
+        }
+
+        float parsed = 0.0f;
+        char extra = '\0';
+        if (sscanf(line, " %f %c", &parsed, &extra) == 1) {
+            if (value != NULL) {
+                *value = parsed;
+            }
+            return 1;
+        }
+
+        printf("Invalid input. Please enter a valid number.\n");
+    }
+}
+
+static void wait_for_enter(void) {
+    char buffer[8];
+    printf("Press Enter to continue...");
+    (void)fgets(buffer, sizeof(buffer), stdin);
+}
+
+static void free_logs_in_tree(StrainNode* root) {
+    if (root == NULL) {
+        return;
+    }
+
+    free_logs_in_tree(root->left);
+    free_logs_in_tree(root->right);
+    culture_free_all_logs(root->log_head);
+    root->log_head = NULL;
+    root->log_tail = NULL;
+}
+
+static void print_menu(void) {
+    printf("===========================================\n");
+    printf("  Microorganism Culture Management System\n");
+    printf("===========================================\n");
+    printf("1. Register New Strain\n");
+    printf("2. Append Culture Log\n");
+    printf("3. End Culture\n");
+    printf("4. Query Strain Status & Logs\n");
+    printf("5. Display All Strain Archives\n");
+    printf("0. Exit System\n");
+    printf("===========================================\n");
+}
 
 int main(void) {
-    run_daily_log_demo();
-    printf("\n");
-    run_bst_demo();
-    printf("\n");
-    run_status_demo();
-    return 0;
+    StrainNode* root = NULL;
+
+    while (1) {
+        int choice = -1;
+        print_menu();
+
+        if (!read_int_input("Please enter your choice (0-5): ", &choice)) {
+            free_logs_in_tree(root);
+            bst_free_strain_tree(root);
+            return 0;
+        }
+
+        if (choice < 0 || choice > 5) {
+            printf("Invalid choice. Please enter a number between 0 and 5.\n");
+            continue;
+        }
+
+        if (choice == 0) {
+            free_logs_in_tree(root);
+            bst_free_strain_tree(root);
+            printf("Goodbye.\n");
+            return 0;
+        }
+
+        if (choice == 1) {
+            char name[50];
+            int id = 0;
+
+            if (!read_line("Enter strain name: ", name, sizeof(name))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+
+            if (name[0] == '\0') {
+                printf("Error: strain name cannot be empty.\n");
+                continue;
+            }
+
+            if (!read_int_input("Enter strain ID: ", &id)) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+
+            root = bst_insert_strain(root, name, id);
+            continue;
+        }
+
+        if (choice == 2) {
+            char name[50];
+            StrainNode* target = NULL;
+
+            if (!read_line("Enter strain name: ", name, sizeof(name))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+
+            target = bst_search_strain(root, name);
+            if (target == NULL) {
+                printf("Error: strain \"%s\" not found.\n", name);
+                continue;
+            }
+
+            char date[15];
+            float ph = 0.0f;
+            float temp = 0.0f;
+            char gas_env[50];
+            char observation[256];
+
+            if (!read_line("Enter date (YYYY-MM-DD): ", date, sizeof(date))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+            if (!read_float_input("Enter pH value: ", &ph)) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+            if (!read_float_input("Enter temperature: ", &temp)) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+            if (!read_line("Enter gas environment: ", gas_env, sizeof(gas_env))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+            if (!read_line("Enter observation: ", observation, sizeof(observation))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+
+            culture_append_log(target, date, ph, temp, gas_env, observation);
+            continue;
+        }
+
+        if (choice == 3) {
+            char name[50];
+            StrainNode* target = NULL;
+
+            if (!read_line("Enter strain name: ", name, sizeof(name))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+
+            target = bst_search_strain(root, name);
+            if (target == NULL) {
+                printf("Error: strain \"%s\" not found.\n", name);
+                continue;
+            }
+
+            culture_end_culture(target);
+            continue;
+        }
+
+        if (choice == 4) {
+            char name[50];
+            StrainNode* target = NULL;
+
+            if (!read_line("Enter strain name: ", name, sizeof(name))) {
+                free_logs_in_tree(root);
+                bst_free_strain_tree(root);
+                return 0;
+            }
+
+            target = bst_search_strain(root, name);
+            if (target == NULL) {
+                printf("Error: strain \"%s\" not found.\n", name);
+                continue;
+            }
+
+            culture_display_strain_status(target);
+            continue;
+        }
+
+        if (choice == 5) {
+            if (root == NULL) {
+                printf("No strain archives available.\n");
+            } else {
+                bst_inorder_print_strains(root);
+            }
+            continue;
+        }
+
+        wait_for_enter();
+    }
 }
