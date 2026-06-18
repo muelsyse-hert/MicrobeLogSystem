@@ -5,6 +5,7 @@
 #include "include/culture_status.h"
 #include "include/daily_log_list.h"
 #include "include/strain_archive_bst.h"
+#include "include/storage.h"
 #include "include/app.h"
 
 static void strip_newline(char* text) {
@@ -109,31 +110,56 @@ static void print_menu(void) {
     printf("3. End Culture\n");
     printf("4. Query Strain Status & Logs\n");
     printf("5. Display All Strain Archives\n");
+    printf("6. Save Data to Storage\n");
     printf("0. Exit System\n");
     printf("===========================================\n");
 }
 
 int main(void) {
     StrainNode* root = NULL;
+    
+    /* Initialize file storage backend */
+    StorageContext* storage = storage_file_init("data");
+    if (!storage) {
+        fprintf(stderr, "Error: Failed to initialize storage. Exiting.\n");
+        return 1;
+    }
+    printf("Storage initialized. Data will be saved to 'data/' directory.\n\n");
+    root = storage_load_all_strains(storage);
 
     while (1) {
         int choice = -1;
         print_menu();
 
-        if (!read_int_input("Please enter your choice (0-5): ", &choice)) {
+        if (!read_int_input("Please enter your choice (0-6): ", &choice)) {
+            if (root && storage) {
+                printf("Saving data...\n");
+                storage_save_all_strains(storage, root);
+            }
             free_logs_in_tree(root);
             bst_free_strain_tree(root);
+            if (storage) {
+                storage_close(storage);
+            }
             return 0;
         }
 
-        if (choice < 0 || choice > 5) {
-            printf("Invalid choice. Please enter a number between 0 and 5.\n");
+        if (choice < 0 || choice > 6) {
+            printf("Invalid choice. Please enter a number between 0 and 6.\n");
             continue;
         }
 
         if (choice == 0) {
+            if (root && storage) {
+                printf("Saving data before exiting...\n");
+                storage_save_all_strains(storage, root);
+                printf("Data saved successfully.\n");
+            }
             free_logs_in_tree(root);
             bst_free_strain_tree(root);
+            if (storage) {
+                storage_close(storage);
+            }
             printf("Goodbye.\n");
             return 0;
         }
@@ -142,24 +168,21 @@ int main(void) {
             char name[50];
             int id = 0;
 
-            if (!read_line("Enter strain name: ", name, sizeof(name))) {
-                free_logs_in_tree(root);
-                bst_free_strain_tree(root);
-                return 0;
+            if (!read_line("Enter Strain Name: ", name, sizeof(name))) {
+                break;
             }
 
             if (name[0] == '\0') {
-                printf("Error: strain name cannot be empty.\n");
+                printf("Error: Strain name cannot be empty.\n");
                 continue;
             }
 
-            if (!read_int_input("Enter strain ID: ", &id)) {
-                free_logs_in_tree(root);
-                bst_free_strain_tree(root);
-                return 0;
+            if (!read_int_input("Enter Strain ID: ", &id)) {
+                break;
             }
 
             root = bst_insert_strain(root, name, id);
+            printf("Strain registered successfully.\n");
             continue;
         }
 
@@ -167,15 +190,13 @@ int main(void) {
             char name[50];
             StrainNode* target = NULL;
 
-            if (!read_line("Enter strain name: ", name, sizeof(name))) {
-                free_logs_in_tree(root);
-                bst_free_strain_tree(root);
-                return 0;
+            if (!read_line("Enter Strain Name to append log: ", name, sizeof(name))) {
+                break;
             }
 
             target = bst_search_strain(root, name);
             if (target == NULL) {
-                printf("Error: strain \"%s\" not found.\n", name);
+                printf("Error: Strain \"%s\" not found.\n", name);
                 continue;
             }
 
@@ -185,33 +206,18 @@ int main(void) {
             char gas_env[50];
             char observation[256];
 
-            if (!read_line("Enter date (YYYY-MM-DD): ", date, sizeof(date))) {
-                free_logs_in_tree(root);
-                bst_free_strain_tree(root);
-                return 0;
-            }
-            if (!read_float_input("Enter pH value: ", &ph)) {
-                free_logs_in_tree(root);
-                bst_free_strain_tree(root);
-                return 0;
-            }
-            if (!read_float_input("Enter temperature: ", &temp)) {
-                free_logs_in_tree(root);
-                bst_free_strain_tree(root);
-                return 0;
-            }
-            if (!read_line("Enter gas environment: ", gas_env, sizeof(gas_env))) {
-                free_logs_in_tree(root);
-                bst_free_strain_tree(root);
-                return 0;
-            }
-            if (!read_line("Enter observation: ", observation, sizeof(observation))) {
-                free_logs_in_tree(root);
-                bst_free_strain_tree(root);
-                return 0;
-            }
+            if (!read_line("Enter Date (YYYY-MM-DD): ", date, sizeof(date))) break;
+            if (!read_float_input("Enter pH Value: ", &ph)) break;
+            if (!read_float_input("Enter Temperature (C): ", &temp)) break;
+            if (!read_line("Enter Gas Environment: ", gas_env, sizeof(gas_env))) break;
+            if (!read_line("Enter Observation: ", observation, sizeof(observation))) break;
 
             culture_append_log(target, date, ph, temp, gas_env, observation);
+            
+            if (storage && !storage_save_strain(storage, target)) {
+                fprintf(stderr, "Warning: Failed to save strain data to storage.\n");
+            }
+            printf("Log appended and saved successfully.\n");
             continue;
         }
 
@@ -219,19 +225,21 @@ int main(void) {
             char name[50];
             StrainNode* target = NULL;
 
-            if (!read_line("Enter strain name: ", name, sizeof(name))) {
-                free_logs_in_tree(root);
-                bst_free_strain_tree(root);
-                return 0;
+            if (!read_line("Enter Strain Name to end culture: ", name, sizeof(name))) {
+                break;
             }
 
             target = bst_search_strain(root, name);
             if (target == NULL) {
-                printf("Error: strain \"%s\" not found.\n", name);
+                printf("Error: Strain \"%s\" not found.\n", name);
                 continue;
             }
 
             culture_end_culture(target);
+            
+            if (storage && !storage_save_strain(storage, target)) {
+                fprintf(stderr, "Warning: Failed to save strain data to storage.\n");
+            }
             continue;
         }
 
@@ -239,15 +247,13 @@ int main(void) {
             char name[50];
             StrainNode* target = NULL;
 
-            if (!read_line("Enter strain name: ", name, sizeof(name))) {
-                free_logs_in_tree(root);
-                bst_free_strain_tree(root);
-                return 0;
+            if (!read_line("Enter Strain Name to query: ", name, sizeof(name))) {
+                break;
             }
 
             target = bst_search_strain(root, name);
             if (target == NULL) {
-                printf("Error: strain \"%s\" not found.\n", name);
+                printf("Error: Strain \"%s\" not found.\n", name);
                 continue;
             }
 
@@ -263,7 +269,23 @@ int main(void) {
             }
             continue;
         }
+        
+        if (choice == 6) {
+            printf("Saving all data to storage...\n");
+            if (storage && storage_save_all_strains(storage, root)) {
+                printf("All data successfully saved to 'data/' directory.\n");
+            } else {
+                fprintf(stderr, "Error: Failed to save data.\n");
+            }
+            continue;
+        }
 
         wait_for_enter();
     }
+    
+    // Fallback cleanup if broken out of loop
+    free_logs_in_tree(root);
+    bst_free_strain_tree(root);
+    if (storage) storage_close(storage);
+    return 0;
 }
