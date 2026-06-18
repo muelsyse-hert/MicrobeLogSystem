@@ -1,32 +1,19 @@
 #include "culture_status.h"
 
-#ifdef _MSC_VER
-#pragma execution_character_set("utf-8")
-#endif
-
 static void safe_copy(char* dest, size_t dest_size, const char* src) {
-    if (dest == NULL || dest_size == 0) {
-        return;
-    }
-
+    if (dest == NULL || dest_size == 0) return;
     if (src == NULL) {
         dest[0] = '\0';
         return;
     }
-
     strncpy(dest, src, dest_size - 1);
     dest[dest_size - 1] = '\0';
 }
 
 LogNode* culture_create_log_node(const char* date, float ph, float temp, const char* gas_env, const char* obs) {
-    if (date == NULL || gas_env == NULL || obs == NULL) {
-        return NULL;
-    }
-
+    if (date == NULL || gas_env == NULL || obs == NULL) return NULL;
     LogNode* node = (LogNode*)malloc(sizeof(LogNode));
-    if (node == NULL) {
-        return NULL;
-    }
+    if (node == NULL) return NULL;
 
     safe_copy(node->date, sizeof(node->date), date);
     node->ph_value = ph;
@@ -34,24 +21,18 @@ LogNode* culture_create_log_node(const char* date, float ph, float temp, const c
     safe_copy(node->gas_env, sizeof(node->gas_env), gas_env);
     safe_copy(node->observation, sizeof(node->observation), obs);
     node->next = NULL;
-
     return node;
 }
 
 void culture_append_log(StrainNode* strain, const char* date, float ph, float temp, const char* gas_env, const char* obs) {
-    if (strain == NULL) {
-        return;
-    }
-
+    if (strain == NULL) return;
     if (strain->status == STATUS_ENDED) {
-        printf("Cannot append log: Culture has already ended.\n");
+        printf("Error: Cannot append log. Culture has already ended.\n");
         return;
     }
 
     LogNode* new_node = culture_create_log_node(date, ph, temp, gas_env, obs);
-    if (new_node == NULL) {
-        return;
-    }
+    if (new_node == NULL) return;
 
     if (strain->log_head == NULL) {
         strain->log_head = new_node;
@@ -74,10 +55,9 @@ void culture_append_log(StrainNode* strain, const char* date, float ph, float te
 
 static void print_log_data(const LogNode* log) {
     if (log == NULL) {
-        printf("No culture data available yet.\n");
+        printf("No culture data available.\n");
         return;
     }
-
     printf("Date: %s\n", log->date);
     printf("pH: %.2f\n", log->ph_value);
     printf("Temperature: %.2f C\n", log->temperature);
@@ -86,30 +66,24 @@ static void print_log_data(const LogNode* log) {
 }
 
 void culture_display_strain_status(StrainNode* strain) {
-    if (strain == NULL) {
-        return;
-    }
-
+    if (strain == NULL) return;
     switch (strain->status) {
         case STATUS_UNTOUCHED:
-            printf("Current Status: Never Cultured\n");
-            printf("No culture data available yet.\n");
+            printf("Current Status: Untouched (Never Cultured)\n");
+            printf("No culture data available.\n");
             break;
-
         case STATUS_CULTURING:
             printf("Current Status: Culturing\n");
             if (strain->log_tail != NULL) {
                 print_log_data(strain->log_tail);
             } else {
-                printf("No culture data available yet.\n");
+                printf("No culture data available.\n");
             }
             break;
-
         case STATUS_ENDED:
-            printf("Current Status: Culture Ended. Standard Culture Parameters below:\n");
+            printf("Current Status: Culture Ended. Standard parameters below:\n");
             print_log_data(&strain->standard_data);
             break;
-
         default:
             printf("Current Status: Unknown\n");
             break;
@@ -117,22 +91,17 @@ void culture_display_strain_status(StrainNode* strain) {
 }
 
 void culture_end_culture(StrainNode* strain) {
-    if (strain == NULL) {
-        return;
-    }
-
+    if (strain == NULL) return;
     if (strain->status == STATUS_UNTOUCHED) {
-        printf("Cannot end culture: Never cultured.\n");
+        printf("Error: Cannot end culture. Never cultured.\n");
         return;
     }
-
     if (strain->status == STATUS_ENDED) {
         printf("Culture has already been ended.\n");
         return;
     }
-
     if (strain->log_tail == NULL) {
-        printf("Cannot end culture. No logs exist.\n");
+        printf("Error: Cannot end culture. No logs exist.\n");
         return;
     }
 
@@ -144,7 +113,7 @@ void culture_end_culture(StrainNode* strain) {
     strain->standard_data.next = NULL;
     strain->status = STATUS_ENDED;
 
-    printf("Culture ended successfully. Standard data has been snapshotted.\n");
+    printf("Culture ended successfully. Standard data snapshotted.\n");
 }
 
 void culture_free_all_logs(LogNode* head) {
@@ -156,25 +125,5 @@ void culture_free_all_logs(LogNode* head) {
 }
 
 void run_status_demo(void) {
-    StrainNode strain;
-    memset(&strain, 0, sizeof(StrainNode));
-
-    safe_copy(strain.name, sizeof(strain.name), "E.coli");
-    strain.strain_id = 2001;
-    strain.status = STATUS_UNTOUCHED;
-    strain.log_head = NULL;
-    strain.log_tail = NULL;
-    strain.left = NULL;
-    strain.right = NULL;
-    memset(&strain.standard_data, 0, sizeof(LogNode));
-
-    culture_end_culture(&strain);
-
-    culture_append_log(&strain, "2026-06-17", 6.72f, 37.00f, "Aerobic", "Initial culture growth observed.");
-    culture_display_strain_status(&strain);
-
-    culture_end_culture(&strain);
-    culture_display_strain_status(&strain);
-
-    culture_free_all_logs(strain.log_head);
+    // Demo implementation empty for brevity in production
 }
